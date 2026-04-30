@@ -1,0 +1,16 @@
+# Data folders (do not track datasets)
+data/raw/
+data/processed/
+
+# R files
+.Rhistory
+.RData
+.Rproj.user/
+
+# System files
+desktop.ini
+
+# Optional large files
+*.csv
+*.xlsx
+*.zip
