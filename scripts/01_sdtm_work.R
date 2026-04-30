@@ -1,12 +1,3 @@
-# =========================================================
-# SDTM REVIEW SCRIPT
-# Purpose: Load, inspect, and validate SDTM datasets
-# Domains: DM, AE, LB
-# =========================================================
-
-# ---------------------------
-# 1. PACKAGES
-# ---------------------------
 if (!requireNamespace("tidyverse", quietly = TRUE)) {
   install.packages("tidyverse")
 }
@@ -15,71 +6,115 @@ if (!requireNamespace("haven", quietly = TRUE)) {
   install.packages("haven")
 }
 
-# Load required packages
 library(tidyverse)
 library(haven)
 
-# Set project root directory
 setwd("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio")
 
-# ---------------------------
-# Load SDTM datasets (XPT format)
-# ---------------------------
-dm <- read_xpt("data/raw/dm.xpt")   # Demographics
-ae <- read_xpt("data/raw/ae.xpt")   # Adverse Events
-lb <- read_xpt("data/raw/lb.xpt")   # Laboratory results
+dm <- read_xpt("data/raw/dm.xpt")
+ae <- read_xpt("data/raw/ae.xpt")
+lb <- read_xpt("data/raw/lb.xpt")
 
 # ---------------------------
-# Subject-level identifiers
+# SUBJECT OVERVIEW
 # ---------------------------
-dm_ids <- unique(dm$USUBJID)
-ae_ids <- unique(ae$USUBJID)
-lb_ids <- unique(lb$USUBJID)
+dm_n <- n_distinct(dm$USUBJID)
+ae_n <- n_distinct(ae$USUBJID)
+lb_n <- n_distinct(lb$USUBJID)
 
-length(dm_ids)  # number of subjects in DM
-length(ae_ids)  # subjects with adverse events
-length(lb_ids)  # subjects with lab data
+subject_summary <- tibble(
+  dataset = c("DM", "AE", "LB"),
+  subjects = c(dm_n, ae_n, lb_n)
+)
 
-# Check for subjects appearing in AE/LB but not in DM
-setdiff(ae_ids, dm_ids)
-setdiff(lb_ids, dm_ids)
-
-# ---------------------------
-# Missing data overview
-# ---------------------------
-colSums(is.na(dm))
-colSums(is.na(ae))
-colSums(is.na(lb))
+subject_summary
 
 # ---------------------------
-# Duplicate subject checks
+# CROSS-DOMAIN INTEGRITY
 # ---------------------------
-anyDuplicated(dm$USUBJID)
-anyDuplicated(ae$USUBJID)
-anyDuplicated(lb$USUBJID)
+ae_not_in_dm <- setdiff(ae$USUBJID, dm$USUBJID)
+lb_not_in_dm <- setdiff(lb$USUBJID, dm$USUBJID)
+
+cross_domain_summary <- tibble(
+  check = c("AE not in DM", "LB not in DM"),
+  count = c(length(ae_not_in_dm), length(lb_not_in_dm)),
+  status = case_when(
+    length(ae_not_in_dm) == 0 & length(lb_not_in_dm) == 0 ~ "PASS",
+    length(ae_not_in_dm) < 10 & length(lb_not_in_dm) < 10 ~ "REVIEW",
+    TRUE ~ "FAIL"
+  )
+)
+
+cross_domain_summary
 
 # ---------------------------
-# Safety signal overview (AE)
+# MISSING DATA CHECK
 # ---------------------------
-table(ae$AESER, useNA = "ifany")   # serious vs non-serious events
-table(ae$AETOXGR, useNA = "ifany") # severity grading
+missing_summary <- tibble(
+  dataset = c("DM", "AE", "LB"),
+  missing_cells = c(sum(is.na(dm)), sum(is.na(ae)), sum(is.na(lb)))
+)
+
+missing_summary
 
 # ---------------------------
-# Lab data distribution check
+# DUPLICATE CHECK
 # ---------------------------
-summary(lb$LBSTRESN)
+duplicate_summary <- tibble(
+  dataset = c("DM", "AE", "LB"),
+  duplicates = c(
+    sum(duplicated(dm$USUBJID)),
+    NA,  # AE expected to have repeats
+    NA   # LB expected to have repeats
+  )
+)
 
-# Flag extreme lab values (basic outlier detection)
-lb %>%
+duplicate_summary
+
+# ---------------------------
+# AE SAFETY PROFILE
+# ---------------------------
+ae_severity <- table(ae$AETOXGR, useNA = "ifany")
+ae_serious <- table(ae$AESER, useNA = "ifany")
+
+ae_summary <- list(
+  severity = ae_severity,
+  serious = ae_serious
+)
+
+ae_summary
+
+# ---------------------------
+# LAB DISTRIBUTION CHECK
+# ---------------------------
+lb_stats <- summary(lb$LBSTRESN)
+
+lb_outliers <- lb %>%
   filter(
     LBSTRESN > quantile(LBSTRESN, 0.99, na.rm = TRUE) |
       LBSTRESN < quantile(LBSTRESN, 0.01, na.rm = TRUE)
   )
 
-# ---------------------------
-# Treatment arm overview
-# ---------------------------
-table(dm$ARM, useNA = "ifany")
+lab_summary <- list(
+  stats = lb_stats,
+  outliers = nrow(lb_outliers)
+)
 
-# End of SDTM review
-cat("SDTM review completed\n")
+lab_summary
+
+# ---------------------------
+# TREATMENT ARM DISTRIBUTION
+# ---------------------------
+arm_summary <- table(dm$ARM, useNA = "ifany")
+arm_summary
+
+# ---------------------------
+# FINAL QC STATUS
+# ---------------------------
+qc_status <- case_when(
+  length(ae_not_in_dm) == 0 & length(lb_not_in_dm) == 0 ~ "PASS",
+  length(ae_not_in_dm) < 10 & length(lb_not_in_dm) < 10 ~ "REVIEW",
+  TRUE ~ "FAIL"
+)
+
+cat("\nSDTM QC STATUS:", qc_status, "\n")
