@@ -1,273 +1,217 @@
 # =========================================================
-# CLINICAL STUDY REVIEW DASHBOARD (v4 - Premium)
+# MDR CLINICAL REVIEW DASHBOARD (INTERVIEW READY vFinal FIXED)
 # =========================================================
 
 # ---------------------------
-# 1. PACKAGES
+# PACKAGES
 # ---------------------------
 if (!requireNamespace("shiny", quietly = TRUE)) install.packages("shiny")
+if (!requireNamespace("shinydashboard", quietly = TRUE)) install.packages("shinydashboard")
 if (!requireNamespace("tidyverse", quietly = TRUE)) install.packages("tidyverse")
 if (!requireNamespace("DT", quietly = TRUE)) install.packages("DT")
 
 library(shiny)
+library(shinydashboard)
 library(tidyverse)
 library(DT)
 
 # ---------------------------
-# 2. DATA
+# DATA
 # ---------------------------
-setwd("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio")
-
-population_summary <- read.csv("data/outputs/population_summary.csv")
-ae_by_arm <- read.csv("data/outputs/ae_by_arm.csv")
-ae_serious <- read.csv("data/outputs/ae_serious.csv")
-top_ae_terms <- read.csv("data/outputs/top_ae_terms.csv")
-lab_change <- read.csv("data/outputs/lab_change.csv")
+adsl <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/processed/adsl.csv")
+population_summary <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/population_summary.csv")
+ae_by_arm <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/ae_by_arm.csv")
+ae_serious <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/ae_serious.csv")
+lab_change <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/lab_change.csv")
+signal_summary <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/signal_summary.csv")
 
 # ---------------------------
-# CLEAN DATA (HANDLE NA)
+# COLORS
 # ---------------------------
-ae_by_arm <- ae_by_arm %>%
-  mutate(ARM = ifelse(is.na(ARM), "Missing", ARM))
+arm_colors <- c(
+  "Treatment 1" = "#1F77B4",
+  "Treatment 2" = "#FF7F0E",
+  "Treatment 3" = "#2CA02C",
+  "Treatment 4" = "#D62728"
+)
 
-ae_serious <- ae_serious %>%
-  mutate(
-    ARM = ifelse(is.na(ARM), "Missing", ARM),
-    SERIOUS_FLAG = ifelse(is.na(SERIOUS_FLAG), "Missing", SERIOUS_FLAG)
-  )
-
-lab_change <- lab_change %>%
-  mutate(
-    ARM = ifelse(is.na(ARM), "Missing", ARM),
-    LBTEST = ifelse(is.na(LBTEST), "Missing", LBTEST)
-  )
+# ---------------------------
+# CLEAN SIGNAL LABELS
+# ---------------------------
+signal_summary$severity <- toupper(signal_summary$severity)
 
 # =========================================================
-# 3. UI
+# UI
 # =========================================================
-ui <- navbarPage(
+ui <- dashboardPage(
   
-  title = "Clinical Study Dashboard",
+  dashboardHeader(title = "Clinical Review Dashboard"),
   
-  # ---------------------------
-  # TAB 1: POPULATION
-  # ---------------------------
-  tabPanel("Population",
-           
-           fluidPage(
-             
-             br(),
-             h2("Study Population Overview"),
-             hr(),
-             
-             fluidRow(
-               column(4,
-                      wellPanel(
-                        h4("Total Subjects"),
-                        h2(n_distinct(population_summary$USUBJID))
-                      )),
-               column(4,
-                      wellPanel(
-                        h4("Treatment Arms"),
-                        h2(n_distinct(population_summary$ARM))
-                      )),
-               column(4,
-                      wellPanel(
-                        h4("Mean Age"),
-                        h2(round(mean(population_summary$AGE, na.rm = TRUE), 1))
-                      ))
-             ),
-             
-             br(),
-             
-             fluidRow(
-               column(6,
-                      plotOutput("pop_bar", height = "300px")),
-               column(6,
-                      DTOutput("pop_table"))
-             )
-           )
+  dashboardSidebar(
+    sidebarMenu(
+      selectInput("mode", "Mode",
+                  choices = c("Executive", "Analyst")),
+      menuItem("Population", tabName = "pop", icon = icon("users")),
+      menuItem("Safety", tabName = "safety", icon = icon("exclamation-triangle")),
+      menuItem("Labs", tabName = "labs", icon = icon("flask"))
+    )
   ),
   
-  # ---------------------------
-  # TAB 2: SAFETY
-  # ---------------------------
-  tabPanel("Safety",
-           
-           fluidPage(
-             
-             br(),
-             h2("Adverse Event Analysis"),
-             hr(),
-             
-             fluidRow(
-               column(4,
-                      selectInput(
-                        "arm_filter",
-                        "Drill-down by Arm:",
-                        choices = c("All", unique(ae_by_arm$ARM)),
-                        selected = "All"
-                      ))
-             ),
-             
-             br(),
-             
-             fluidRow(
-               column(6,
-                      plotOutput("ae_bar", height = "300px")),
-               column(6,
-                      plotOutput("ae_serious", height = "300px"))
-             ),
-             
-             br(),
-             
-             fluidRow(
-               column(12,
-                      DTOutput("ae_table"))
-             ),
-             
-             br(),
-             
-             fluidRow(
-               column(12,
-                      DTOutput("ae_top_table"))
-             )
-           )
-  ),
-  
-  # ---------------------------
-  # TAB 3: LABS
-  # ---------------------------
-  tabPanel("Labs",
-           
-           fluidPage(
-             
-             br(),
-             h2("Laboratory Analysis"),
-             hr(),
-             
-             fluidRow(
-               column(4,
-                      selectInput(
-                        "lbtest_filter",
-                        "Select Lab Test:",
-                        choices = unique(lab_change$LBTEST)
-                      ))
-             ),
-             
-             br(),
-             
-             fluidRow(
-               column(6,
-                      plotOutput("lab_bar", height = "300px")),
-               column(6,
-                      plotOutput("lab_trend", height = "300px"))
-             ),
-             
-             br(),
-             
-             fluidRow(
-               column(12,
-                      DTOutput("lab_table"))
-             )
-           )
+  dashboardBody(
+    
+    # ---------------------------
+    # SIGNAL STRIP
+    # ---------------------------
+    fluidRow(
+      valueBox(sum(signal_summary$severity == "HIGH"),
+               "High Risk Signals", color = "red"),
+      valueBox(sum(signal_summary$severity == "MEDIUM"),
+               "Medium Risk Signals", color = "yellow"),
+      valueBox(sum(signal_summary$severity == "LOW"),
+               "Low Risk Signals", color = "green")
+    ),
+    
+    fluidRow(
+      box(
+        width = 12,
+        title = "Active Study Signals",
+        status = "primary",
+        solidHeader = TRUE,
+        DTOutput("signal_table")
+      )
+    ),
+    
+    tabItems(
+      
+      # =====================================================
+      # POPULATION (TABLE ONLY - FIXED)
+      # =====================================================
+      tabItem(tabName = "pop",
+              
+              fluidRow(
+                box(
+                  width = 12,
+                  title = "Study Population Overview (By Treatment Arm)",
+                  status = "info",
+                  solidHeader = TRUE,
+                  DTOutput("pop_table")
+                )
+              )
+      ),
+      
+      # =====================================================
+      # SAFETY
+      # =====================================================
+      tabItem(tabName = "safety",
+              
+              fluidRow(
+                box(width = 6,
+                    title = "Adverse Events by Arm",
+                    status = "danger",
+                    solidHeader = TRUE,
+                    plotOutput("ae_plot")
+                ),
+                
+                box(width = 6,
+                    title = "Serious Adverse Events",
+                    status = "warning",
+                    solidHeader = TRUE,
+                    plotOutput("ae_serious_plot")
+                )
+              )
+      ),
+      
+      # =====================================================
+      # LABS
+      # =====================================================
+      tabItem(tabName = "labs",
+              
+              fluidRow(
+                box(width = 12,
+                    title = "Laboratory Changes by Arm",
+                    status = "success",
+                    solidHeader = TRUE,
+                    plotOutput("lab_plot")
+                )
+              )
+      )
+    )
   )
 )
 
 # =========================================================
-# 4. SERVER
+# SERVER
 # =========================================================
-server <- function(input, output) {
+server <- function(input, output, session) {
   
   # ---------------------------
-  # POPULATION
+  # SIGNAL TABLE
   # ---------------------------
-  output$pop_bar <- renderPlot({
-    ggplot(population_summary, aes(x = ARM)) +
-      geom_bar(fill = "#2C3E50") +
-      theme_minimal(base_size = 13) +
-      labs(title = "Subjects per Treatment Arm",
-           x = "Treatment Arm",
-           y = "Subjects")
+  output$signal_table <- renderDT({
+    
+    datatable(
+      signal_summary %>% select(ARM, signal, severity),
+      options = list(pageLength = 5, dom = "t"),
+      rownames = FALSE
+    ) %>%
+      formatStyle(
+        "severity",
+        target = "row",
+        backgroundColor = styleEqual(
+          c("HIGH", "MEDIUM", "LOW"),
+          c("#f8d7da", "#fff3cd", "#d4edda")
+        )
+      )
   })
   
+  # ---------------------------
+  # POPULATION TABLE (ONLY VIEW)
+  # ---------------------------
   output$pop_table <- renderDT({
-    datatable(population_summary, options = list(pageLength = 5))
+    
+    datatable(
+      population_summary,
+      options = list(pageLength = 10),
+      rownames = FALSE
+    )
   })
   
   # ---------------------------
   # SAFETY
   # ---------------------------
-  
-  # FILTERED TABLE ONLY
-  filtered_ae <- reactive({
-    if (input$arm_filter == "All") {
-      ae_by_arm
-    } else {
-      ae_by_arm %>% filter(ARM == input$arm_filter)
-    }
+  output$ae_plot <- renderPlot({
+    
+    ggplot(ae_by_arm,
+           aes(x = ARM, y = total_events, fill = ARM)) +
+      geom_col() +
+      scale_fill_manual(values = arm_colors) +
+      theme_minimal() +
+      theme(legend.position = "none")
   })
   
-  output$ae_bar <- renderPlot({
-    ggplot(ae_by_arm, aes(x = ARM, y = total_events)) +
-      geom_col(fill = "#E74C3C") +
-      theme_minimal(base_size = 13) +
-      labs(title = "AE Count by Treatment Arm",
-           x = "Treatment Arm",
-           y = "Number of Events")
-  })
-  
-  output$ae_serious <- renderPlot({
-    ggplot(ae_serious, aes(x = ARM, y = count, fill = SERIOUS_FLAG)) +
-      geom_col(position = "stack") +
-      scale_fill_manual(values = c("#3498DB", "#E74C3C", "grey")) +
-      theme_minimal(base_size = 13) +
-      labs(title = "Serious vs Non-Serious AEs",
-           x = "Treatment Arm",
-           y = "Count",
-           fill = "Severity")
-  })
-  
-  output$ae_table <- renderDT({
-    datatable(filtered_ae(), options = list(pageLength = 5))
-  })
-  
-  output$ae_top_table <- renderDT({
-    datatable(top_ae_terms, options = list(pageLength = 5))
+  output$ae_serious_plot <- renderPlot({
+    
+    ggplot(ae_serious,
+           aes(x = ARM, y = count, fill = SERIOUS_FLAG)) +
+      geom_col() +
+      theme_minimal()
   })
   
   # ---------------------------
   # LABS
   # ---------------------------
-  filtered_lb <- reactive({
-    lab_change %>% filter(LBTEST == input$lbtest_filter)
-  })
-  
-  output$lab_bar <- renderPlot({
-    ggplot(filtered_lb(), aes(x = ARM, y = mean_change)) +
-      geom_col(fill = "#27AE60") +
-      theme_minimal(base_size = 13) +
-      labs(title = "Mean Lab Change by Arm",
-           x = "Treatment Arm",
-           y = "Change from Baseline")
-  })
-  
-  output$lab_trend <- renderPlot({
-    ggplot(filtered_lb(), aes(x = ARM, y = mean_change)) +
-      geom_point(size = 3, color = "#2980B9") +
-      geom_line(group = 1, color = "#2980B9") +
-      theme_minimal(base_size = 13) +
-      labs(title = "Lab Trend Across Arms",
-           x = "Treatment Arm",
-           y = "Change")
-  })
-  
-  output$lab_table <- renderDT({
-    datatable(filtered_lb(), options = list(pageLength = 5))
+  output$lab_plot <- renderPlot({
+    
+    ggplot(lab_change,
+           aes(x = ARM, y = mean_change, fill = ARM)) +
+      geom_col() +
+      scale_fill_manual(values = arm_colors) +
+      theme_minimal() +
+      theme(legend.position = "none")
   })
 }
 
 # =========================================================
-# 5. RUN
+# RUN APP
 # =========================================================
 shinyApp(ui, server)
