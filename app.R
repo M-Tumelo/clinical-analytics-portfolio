@@ -18,12 +18,12 @@ library(DT)
 # ---------------------------
 # DATA
 # ---------------------------
-adsl <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/processed/adsl.csv")
-population_summary <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/population_summary.csv")
-ae_by_arm <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/ae_by_arm.csv")
-ae_serious <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/ae_serious.csv")
-lab_change <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/lab_change.csv")
-signal_summary <- read.csv("C:/Users/Tumel/OneDrive/Documents/clinical-analytics-portfolio/data/outputs/signal_summary.csv")
+adsl <- read.csv("data/processed/adsl.csv")
+population_summary <- read.csv("data/outputs/population_summary.csv")
+ae_by_arm <- read.csv("data/outputs/ae_by_arm.csv")
+ae_serious <- read.csv("data/outputs/ae_serious.csv")
+lab_change <- read.csv("data/outputs/lab_change.csv")
+signal_summary <- read.csv("data/outputs/signal_summary.csv")
 
 # ---------------------------
 # COLORS
@@ -69,16 +69,6 @@ ui <- dashboardPage(
                "Medium Risk Signals", color = "yellow"),
       valueBox(sum(signal_summary$severity == "LOW"),
                "Low Risk Signals", color = "green")
-    ),
-    
-    fluidRow(
-      box(
-        width = 12,
-        title = "Active Study Signals",
-        status = "primary",
-        solidHeader = TRUE,
-        DTOutput("signal_table")
-      )
     ),
     
     tabItems(

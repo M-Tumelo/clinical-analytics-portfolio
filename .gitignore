@@ -6,6 +6,7 @@ data/processed/
 .Rhistory
 .RData
 .Rproj.user/
+rsconnect/
 
 # System files
 desktop.ini
